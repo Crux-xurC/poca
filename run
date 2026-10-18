@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+POCA_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+TEZCATL_DIR="${TEZCATL_DIR:-$HOME/my_app/tezcatl}"
+CEF_APP="${POCA_CEF_APP:-$POCA_DIR/build/Release/cefsimple}"
+URL="${POCA_URL:-http://127.0.0.1:4001/main.html}"
+
+if [[ ! -x "$CEF_APP" ]]; then
+  echo "poca: CEF app not built: $CEF_APP" >&2
+  echo "Build the CEF cefsimple target first; see README.md." >&2
+  exit 1
+fi
+
+# Start Tezcatl services without asking the desktop browser to open a window.
+nix develop "$TEZCATL_DIR" --command "$TEZCATL_DIR/nix/t" -d --no-browser
+
+# Wait for the local page server before creating the CEF window.
+for _ in {1..100}; do
+  if curl --fail --silent --output /dev/null "$URL"; then
+    exec "$CEF_APP" --url="$URL" --use-alloy-style
+  fi
+  sleep 0.2
+done
+echo "poca: Tezcatl did not serve $URL within 20 seconds" >&2
+exit 1
