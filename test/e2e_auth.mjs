@@ -13,6 +13,9 @@
 //   - the secret is in no log and in no file Poca leaves; closing Poca stops
 //     both programs
 //
+//   - WebSockets go through a one-shot ticket from /ticket: auth-test's page
+//     opens one; a used, expired, made-up or missing ticket is refused, and
+//     control and anything outside Poca cannot get a ticket
 //   - a navigation within auth-test is OK; a tab control opens (window.open)
 //     and a redirect by control, even of a page the person opened, are NG
 //
@@ -30,7 +33,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const POCA = path.join(ROOT, 'build/Release/poca');
 const SERVER = path.join(ROOT, 'test/auth-app/server.py');
-const AUTH = 4310, CONTROL = 4311, CDP = 9333;
+const AUTH = 4310, CONTROL = 4311, CDP = 9333, TTL = 2;
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'poca-e2e-auth-'));
 const config = path.join(tmp, 'config'), runtime = path.join(tmp, 'runtime');
@@ -39,7 +42,7 @@ for (const d of [path.join(config, 'poca'), runtime, logs]) fs.mkdirSync(d, { re
 
 const row = (name, port, auth) => ({
   name, ports: [port], auth,
-  run: ['/usr/bin/python3', '-I', SERVER, '--port', String(port)],
+  run: ['/usr/bin/python3', '-I', SERVER, '--port', String(port), '--ticket-ttl', String(TTL)],
   cwd: tmp, log: path.join(logs, name + '.log'),
 });
 fs.writeFileSync(path.join(config, 'poca/box.json'), JSON.stringify({
@@ -104,6 +107,18 @@ const pageAt = (prefix) => until('a tab at ' + prefix, async () =>
   (await targets()).find((t) => t.type === 'page' && t.url.startsWith(prefix)));
 const resultText = (page) => until('the page result', () =>
   page.eval(`document.getElementById('result')?.textContent || ''`));
+const wsText = (page) => until("the page's WebSocket", async () => {
+  const t = await page.eval(`document.getElementById('ws')?.textContent || ''`);
+  return t.startsWith('WS ') && !t.endsWith('…') && t;
+});
+// From inside a page: 'open' when the WebSocket says hello, else 'refused'.
+const tryWs = (page, url) => page.eval(`new Promise((res) => {
+  const ws = new WebSocket(${JSON.stringify(url)});
+  ws.onmessage = (e) => { res(e.data === 'hello' ? 'open' : 'odd'); ws.close(); };
+  ws.onerror = () => res('refused');
+})`);
+const ticketFrom = (page, url) => page.eval(
+  `fetch(${JSON.stringify(url)}, {cache: 'no-store'}).then(async (r) => ({status: r.status, ...(await r.json())}))`);
 
 // --- run -------------------------------------------------------------------
 
@@ -140,6 +155,18 @@ try {
   })()`, true);
   const authPage = await Page.open(await pageAt(`http://127.0.0.1:${AUTH}/`));
   check(await resultText(authPage) === 'OK', 'the bookmark opens auth-test: OK');
+  check(await wsText(authPage) === 'WS OK', "auth-test's page opens its WebSocket with a ticket: WS OK");
+
+  const WS = `ws://127.0.0.1:${AUTH}/ws`;
+  let t = await ticketFrom(authPage, '/ticket');
+  check(t.status === 200 && t.ticket, 'auth-test gets a ticket', JSON.stringify(t));
+  check(await tryWs(authPage, `${WS}?ticket=${t.ticket}`) === 'open', 'the ticket opens a WebSocket');
+  check(await tryWs(authPage, `${WS}?ticket=${t.ticket}`) === 'refused', 'the same ticket again: refused');
+  t = await ticketFrom(authPage, '/ticket');
+  await sleep(TTL * 1000 + 500);
+  check(await tryWs(authPage, `${WS}?ticket=${t.ticket}`) === 'refused', 'an expired ticket: refused');
+  check(await tryWs(authPage, WS) === 'refused', 'a WebSocket without a ticket: refused');
+  check(await tryWs(authPage, `${WS}?ticket=forged`) === 'refused', 'a made-up ticket: refused');
 
   const whoami = (page, url, init = '{}') =>
     page.eval(`fetch(${JSON.stringify(url)}, ${init}).then((r) => r.json())`);
@@ -168,6 +195,10 @@ try {
   await until('box shows control', async () => (await box.eval('location.href')).includes(`:${CONTROL}/`));
   const control = box;
   check(await resultText(control) === 'NG', 'control opened by the person: NG (it has no secret)');
+  check(await wsText(control) === 'WS NG', "control's own page: WS NG (no ticket without the secret)");
+  t = await ticketFrom(control, `http://127.0.0.1:${AUTH}/ticket`);
+  check(t.status === 401 && !t.ticket, "control asking auth-test for a ticket: 401", JSON.stringify(t));
+  check(await tryWs(control, `ws://127.0.0.1:${AUTH}/ws`) === 'refused', "control opening auth-test's WebSocket: refused");
   r = await whoami(control, '/whoami');
   check(!r.header, 'control fetching itself: no header', JSON.stringify(r));
   r = await whoami(control, `http://127.0.0.1:${AUTH}/whoami`);
@@ -187,10 +218,19 @@ try {
   // An ordinary browser and a plain request.
   const profile = fs.mkdtempSync(path.join(tmp, 'chromium-'));
   const dom = execFileSync('/usr/bin/chromium', ['--headless=new', '--disable-gpu', `--user-data-dir=${profile}`,
-    '--dump-dom', `http://127.0.0.1:${AUTH}/`], { stdio: ['ignore', 'pipe', 'ignore'], timeout: 30000 }).toString();
+    '--virtual-time-budget=5000', '--dump-dom', `http://127.0.0.1:${AUTH}/`], { stdio: ['ignore', 'pipe', 'ignore'], timeout: 30000 }).toString();
   check(/<div id="result">NG<\/div>/.test(dom), 'headless Chromium sees NG');
+  check(/<div id="ws">WS NG<\/div>/.test(dom), 'headless Chromium: WS NG', dom.match(/<div id="ws">[^<]*/)?.[0]);
   const plain = await fetch(`http://127.0.0.1:${AUTH}/`);
   check(plain.status === 401 && (await plain.text()).includes('>NG<'), 'a plain request gets 401 NG');
+  const plainTicket = await fetch(`http://127.0.0.1:${AUTH}/ticket`);
+  check(plainTicket.status === 401, 'a plain request for a ticket gets 401');
+  const direct = await new Promise((res) => {
+    const ws = new WebSocket(`ws://127.0.0.1:${AUTH}/ws`);
+    ws.onopen = () => { res('open'); ws.close(); };
+    ws.onerror = () => res('refused');
+  });
+  check(direct === 'refused', 'a WebSocket straight from outside Poca: refused');
 
   authPage.close();
   // Closing the window: Poca stops what it started, then exits.
@@ -221,6 +261,9 @@ if (secret) {
   walk(tmp);
   check(holds.length === 0, 'the secret is in no file (logs, config, runtime)', holds.join(' '));
 }
+
+const logText = fs.readdirSync(logs).map((f) => fs.readFileSync(path.join(logs, f), 'utf8')).join('');
+check(logText.includes('GET /ws 101') && !logText.includes('ticket='), 'the logs show the handshakes but no ticket');
 
 fs.rmSync(tmp, { recursive: true, force: true });
 console.log(failures ? `${failures} failed` : 'all ok');

@@ -22,7 +22,11 @@ Stages 1 and 2 of `Poca — 取り決め.md` are in place (see `README.md` for w
   "Authentication"). CEF gives navigations no initiator (`null`), so the window records who opens each tab and when the
   person uses the url field; a navigation otherwise comes from the page it leaves; CEF makes a new handler for each
   redirect hop, and a hop keeps the secret only when the previous one carried it. `test/auth-app/server.py` says OK / NG;
-  `test/e2e_auth.mjs` checks 25 cases (all ok, run twice).
+  `test/e2e_auth.mjs` checks 25 cases (all ok, run twice). Committed as `cef99ea`.
+- Stage 4, second step: WebSockets through a one-shot ticket. auth-test has `/ticket` (only with the
+  secret) and `/ws?ticket=` (one handshake, `--ticket-ttl` seconds, default 10; its page shows WS OK / WS NG). Poca is
+  unchanged. The E2E now checks 39 cases (used, expired, made-up and missing tickets; control and anything outside
+  Poca cannot get one; no ticket in the logs), all ok, run twice.
 
 This machine's `~/.config/poca/box.json` has four rows: tezcatl (4001, 4100), emacs (4000), xipe (4200), all through Nix,
 and auth-test (4300, `"auth": true`); `bookmarks.json` has tezcatl and auth-test. The files before auth-test was added
@@ -44,9 +48,13 @@ Two core dumps from crashes before the fixes remain in `/var/lib/systemd/coredum
 1. Done (crux, 2026-10-19): the checks the E2E cannot reach (the window's own views): in Poca, the url field to
    `127.0.0.1:4300` (OK, also while another page is shown), the reload button and Ctrl+R on it (OK); in Brave,
    `http://127.0.0.1:4300/` (NG).
-2. Stage 4 with tezcatl: the relay (and through it emacs-vent and Xipe Totec) checks the secret. Open: WebSocket requests
-   skip `OnBeforeResourceLoad`, so the header cannot be added to the relay's WebSocket; another carrier is needed (not a
-   cookie: cookies ignore the port and would reach every localhost app). Designed together with tezcatl's side.
-3. Poca does not stop what it started when it is killed by a signal (TERM, logout); only closing the window does.
-4. The Nix-free versions of tezcatl, xipe_totec, emacs-vent and embody come last; box's rows then call them instead of
+2. Done (crux, 2026-10-19): auth-test opened from Poca shows WS OK; in Brave it shows WS NG.
+3. Stage 4 with tezcatl (planned, small): one cowboy middleware in the relay between the router and the handlers —
+   HTTP routes check `X-Poca-Secret` (the pages' fetches to `:4100` already get it, same row), WebSocket routes take a
+   ticket — plus a `/ticket` route; on the page side one `lib/core/ticket.js` and its use at the four
+   `new WebSocket(url)` (`lib/core/ws.js`, `lib/xipe/xipe-client.js`, `lib/code/code-editor/lsp-attach.js`,
+   `panels/resident/xterm.html`). Handlers, the page server and the backends unchanged. Undecided: without
+   `POCA_SECRET` the relay lets everything through as now, or refuses.
+4. Poca does not stop what it started when it is killed by a signal (TERM, logout); only closing the window does.
+5. The Nix-free versions of tezcatl, xipe_totec, emacs-vent and embody come last; box's rows then call them instead of
    `nix develop`.

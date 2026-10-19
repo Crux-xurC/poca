@@ -33,12 +33,15 @@ when the request comes from:
 A page of another port (its fetches, navigations, `window.open`, a redirect it answers with) never gets it, and a header
 a page sets itself is dropped. Rows without `"auth"` never see the secret, not even one Poca itself inherited.
 
-Not yet: WebSocket requests skip the handler that adds the header, so a WebSocket to an `"auth"` row goes without it
-(tezcatl's relay on `:4100` needs another way; see `PROGRESS.md`).
+WebSocket requests skip the handler that adds the header, so a WebSocket goes through a **ticket**: the page first
+fetches a ticket over HTTP (that request gets the header), then opens the WebSocket with the ticket in its URL. The
+program gives a ticket only to a request with the secret, accepts it for one handshake within a few seconds, and
+refuses a WebSocket without a good one. The secret itself never goes into a URL. Poca needs nothing more for this; it
+is the program's part.
 
-`test/auth-app/server.py` is a small app that says OK with the secret and NG without; `test/e2e_auth.mjs` drives Poca
-over CDP against it (`node test/e2e_auth.mjs`; it uses its own config and ports 4310, 4311, 9333, never
-`~/.config/poca`).
+`test/auth-app/server.py` is a small app that does both: OK / NG for the page, and `/ticket` with `/ws` (shown on its
+page as WS OK / WS NG). `test/e2e_auth.mjs` drives Poca over CDP against it (`node test/e2e_auth.mjs`; it uses its own
+config and ports 4310, 4311, 9333, never `~/.config/poca`).
 
 ## The window
 
