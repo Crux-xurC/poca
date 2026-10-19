@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Refused</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+<h1>Refused: not localhost</h1>
+<p>Poca loads only <code>127.0.0.1</code>, <code>localhost</code> and <code>[::1]</code>.</p>
+<pre id="url"></pre>
+</main>
+<script>
+document.getElementById('url').textContent =
+  new URLSearchParams(location.search).get('url') || '';
+</script>
+</body>
+</html>

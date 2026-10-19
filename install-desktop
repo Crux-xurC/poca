@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Add Poca to the desktop's application list (~/.local/share/applications),
+# pointing at this checkout's ./run and poca.png.
+set -euo pipefail
+
+POCA_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+APPS="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+
+mkdir -p "$APPS"
+cat > "$APPS/poca.desktop" <<DESKTOP
+[Desktop Entry]
+Type=Application
+Name=Poca
+Comment=A window for localhost development
+Exec=$POCA_DIR/run
+Icon=$POCA_DIR/poca.png
+Terminal=false
+Categories=Development;
+StartupWMClass=poca
+DESKTOP
+update-desktop-database "$APPS" 2>/dev/null || true
+echo "poca: added $APPS/poca.desktop"

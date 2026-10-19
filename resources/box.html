@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>box</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+<h1>box</h1>
+<h2>Bookmarks</h2>
+<div id="bookmarks" class="muted">…</div>
+<h2>Programs</h2>
+<div id="programs" class="muted">…</div>
+<p class="muted">Poca stops only what it started, and stops it when its window closes.
+A program whose ports are already in use (started elsewhere) is greyed out.</p>
+</main>
+<script>
+const place = document.getElementById('bookmarks');
+
+function hint(message) {
+  place.className = 'muted';
+  place.innerHTML = '';
+  const p = document.createElement('p');
+  p.textContent = message;
+  const pre = document.createElement('pre');
+  pre.textContent = '[\n  {"name": "tezcatl", "url": "http://127.0.0.1:4001/main.html"}\n]';
+  place.append(p, pre);
+}
+
+fetch('bookmarks.json', {cache: 'no-store'})
+  .then(r => r.json())
+  .then(list => {
+    if (!Array.isArray(list) || list.length === 0) {
+      hint('No bookmarks yet. Write them in ~/.config/poca/bookmarks.json:');
+      return;
+    }
+    const ul = document.createElement('ul');
+    ul.className = 'bookmarks';
+    for (const b of list) {
+      const li = document.createElement('li');
+      const a = document.createElement('a');
+      a.href = b.url;
+      a.target = '_blank';  // every bookmark opens in a new tab
+      a.textContent = b.name || b.url;
+      const url = document.createElement('span');
+      url.className = 'url';
+      url.textContent = b.url;
+      li.append(a, url);
+      ul.append(li);
+    }
+    place.className = '';
+    place.innerHTML = '';
+    place.append(ul);
+  })
+  // A missing file fails the fetch; a malformed one fails the parse.
+  .catch(e => hint(e instanceof SyntaxError
+    ? 'Could not read ~/.config/poca/bookmarks.json (' + e.message + '). Expected:'
+    : 'No bookmarks yet. Write them in ~/.config/poca/bookmarks.json:'));
+</script>
+<script>
+const programs = document.getElementById('programs');
+const STATE = {
+  free: 'not running',
+  busy: 'in use (not started by Poca)',
+  running: 'running (started by Poca)',
+  stopping: 'stopping…',
+  ended: 'ended',
+};
+let message = '';
+
+function button(label, enabled, action, name) {
+  const b = document.createElement('button');
+  b.textContent = label;
+  b.disabled = !enabled;
+  b.onclick = async () => {
+    b.disabled = true;
+    const r = await fetch(action + '?name=' + encodeURIComponent(name), {method: 'POST'});
+    const j = await r.json().catch(() => ({error: 'no answer'}));
+    message = j.error ? name + ': ' + j.error : '';
+    refresh();
+  };
+  return b;
+}
+
+function render(s) {
+  programs.innerHTML = '';
+  programs.className = '';
+  if (s.error || s.programs.length === 0) {
+    programs.className = 'muted';
+    const p = document.createElement('p');
+    p.textContent = (s.error ? s.error + ' — ' : 'No programs yet. ') + 'Write them in ' + s.index + ':';
+    const pre = document.createElement('pre');
+    pre.textContent = '{"programs": [\n  {"name": "tezcatl", "ports": [4001, 4100],\n' +
+      '   "run": ["~/my_app/tezcatl/nix/t", "--no-browser"], "cwd": "~/my_app/tezcatl"}\n]}';
+    programs.append(p, pre);
+    return;
+  }
+  const table = document.createElement('table');
+  table.className = 'programs';
+  for (const p of s.programs) {
+    const tr = document.createElement('tr');
+    tr.className = p.state;
+    const ports = p.ports.map(n => p.busy.includes(n) ? n + '●' : String(n)).join(' ');
+    let state = STATE[p.state] || p.state;
+    if (p.state === 'ended') state += ' (status ' + p.status + ') — log: ' + p.log;
+    for (const text of [p.name, ports, state]) {
+      const td = document.createElement('td');
+      td.textContent = text;
+      tr.append(td);
+    }
+    const td = document.createElement('td');
+    const startable = p.state === 'free' || p.state === 'ended';
+    td.append(button('start', startable, 'start', p.name),
+              button('stop', p.state === 'running', 'stop', p.name));
+    tr.append(td);
+    table.append(tr);
+  }
+  programs.append(table);
+  if (message) {
+    const m = document.createElement('p');
+    m.className = 'error';
+    m.textContent = message;
+    programs.append(m);
+  }
+}
+
+async function refresh() {
+  const r = await fetch('programs.json', {cache: 'no-store'}).catch(() => null);
+  if (r) render(await r.json());
+}
+
+refresh();
+// Ports open and close on their own; look again while the box is shown.
+setInterval(() => { if (document.visibilityState === 'visible') refresh(); }, 2000);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') refresh();
+});
+</script>
+</body>
+</html>
