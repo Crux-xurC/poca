@@ -130,7 +130,11 @@ Poca 独自のショートカットは置かない。ただし **box の開け�
   は URL に出さない。Poca 側の変更は要らない（アプリの側の仕事）
 - ページの関所（:4001 を直接開くと断る）は守りの本体ではない（中継に直接繋げるため）。tezcatl では入れない
 - tezcatl では: 中継に cowboy の middleware を1つ（HTTP はヘッダ、WebSocket はチケット）と `/ticket`、ページ側は
-  `lib/core/ticket.js` と `new WebSocket` の4か所。handler・ページの配信・バックエンドは変えない
+  `lib/core/ticket.js` と `new WebSocket` の4か所。handler・ページの配信・バックエンドは変えない（tezcatl の D-poca-secret）
+- `POCA_SECRET` の無い中継は**起動しない**（素通しでは穴が残るため）。認証なしは人が選ぶ `t --no-auth` だけ
+- `Origin` の無い WebSocket（ブラウザではないもの、Xipe Totec の `/lsp`）は通す。同じユーザーのプログラムは守る相手に
+  入れない（`~/my_app` も中継の環境変数も読める）。HTTP は `Origin` によらず必ずヘッダ
+- Poca 以外のブラウザで開いたときの表示は後の段（crux に腹案）
 
 ## tezcatl 側で要ること（tezcatl のリポジトリで扱う）
 

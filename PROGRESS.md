@@ -49,12 +49,13 @@ Two core dumps from crashes before the fixes remain in `/var/lib/systemd/coredum
    `127.0.0.1:4300` (OK, also while another page is shown), the reload button and Ctrl+R on it (OK); in Brave,
    `http://127.0.0.1:4300/` (NG).
 2. Done (crux, 2026-10-19): auth-test opened from Poca shows WS OK; in Brave it shows WS NG.
-3. Stage 4 with tezcatl (planned, small): one cowboy middleware in the relay between the router and the handlers —
-   HTTP routes check `X-Poca-Secret` (the pages' fetches to `:4100` already get it, same row), WebSocket routes take a
-   ticket — plus a `/ticket` route; on the page side one `lib/core/ticket.js` and its use at the four
-   `new WebSocket(url)` (`lib/core/ws.js`, `lib/xipe/xipe-client.js`, `lib/code/code-editor/lsp-attach.js`,
-   `panels/resident/xterm.html`). Handlers, the page server and the backends unchanged. Undecided: without
-   `POCA_SECRET` the relay lets everything through as now, or refuses.
+3. Stage 4 with tezcatl (done, tezcatl `9274d1e`, its D-poca-secret; crux checked it in Poca and Brave): the relay's middleware `SecretGate`
+   (HTTP needs `X-Poca-Secret`, a browser's WebSocket a ticket from `/ticket`, a WebSocket without `Origin` — Xipe
+   Totec's `/lsp` — passes), `lib/core/ticket.js` before the four WebSockets. Without `POCA_SECRET` the relay does not
+   start unless `t --no-auth`. Xipe Totec unchanged. Found in Poca: the header is added before Chromium's CORS check, so a fetch to
+   another port of the row (`:4001` → `:4100`) is preflighted for `X-Poca-Secret`; the relay now answers preflights itself.
+   Poca's own E2E (same-origin auth-test) does not cover that; tezcatl's `test/e2e/poca_gate.mjs` drives a test Poca. This machine's tezcatl row of `box.json` has `"auth": true` (the file
+   before: `box.json.bak-2026-10-19-tezcatl-auth`).
 4. Poca does not stop what it started when it is killed by a signal (TERM, logout); only closing the window does.
 5. The Nix-free versions of tezcatl, xipe_totec, emacs-vent and embody come last; box's rows then call them instead of
    `nix develop`.
