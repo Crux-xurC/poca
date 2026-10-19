@@ -17,8 +17,28 @@ The pledge covers **Poca's window only**. Programs started from Poca, or run in 
 
 What follows from it: a page that loads Bootstrap or fonts from a CDN breaks in Poca. That is the pledge working.
 
-Authentication (Poca making a secret and handing it to what it starts) is a later stage. Until then, anything that can
-connect to the loopback ports as you can use them.
+## Authentication
+
+Poca makes a secret each time it starts (32 random bytes, kept in its memory only) and hands it to the box rows marked
+`"auth": true`: in `POCA_SECRET` when Poca starts the program, and as the header `X-Poca-Secret` on the requests of its
+pages. The program compares the two and refuses requests without it, so an ordinary browser, `curl`, or another
+localhost page cannot use it. Checking is the program's job; Poca only hands the secret over.
+
+Poca adds the header only to a request for a port of an `"auth"` row that Poca started and that still runs, and only
+when the request comes from:
+
+- the person: the url field, a bookmark, a tab opened from a Poca page, reload;
+- a page of the same row (its links, fetches, redirects within the row).
+
+A page of another port (its fetches, navigations, `window.open`, a redirect it answers with) never gets it, and a header
+a page sets itself is dropped. Rows without `"auth"` never see the secret, not even one Poca itself inherited.
+
+Not yet: WebSocket requests skip the handler that adds the header, so a WebSocket to an `"auth"` row goes without it
+(tezcatl's relay on `:4100` needs another way; see `PROGRESS.md`).
+
+`test/auth-app/server.py` is a small app that says OK with the secret and NG without; `test/e2e_auth.mjs` drives Poca
+over CDP against it (`node test/e2e_auth.mjs`; it uses its own config and ports 4310, 4311, 9333, never
+`~/.config/poca`).
 
 ## The window
 
@@ -53,13 +73,18 @@ Keep secrets out of URLs; bookmarks are not encrypted.
            "--command", "~/my_app/tezcatl/nix/t"],
    "cwd": "~/my_app/tezcatl",
    "env": {},
-   "log": "/tmp/poca-tezcatl.log"}
+   "log": "/tmp/poca-tezcatl.log"},
+  {"name": "auth-test",
+   "ports": [4300],
+   "auth": true,
+   "run": ["/usr/bin/python3", "-I", "~/my_app_no_nix/poca/test/auth-app/server.py", "--port", "4300"]}
 ]}
 ```
 
 - `run` is an argument list, run without a shell; a leading `~` is expanded. It calls the program's own start command (for
   tezcatl, `t`) instead of copying what that command does. The command must stay in the foreground.
 - `cwd` defaults to `~`, `log` to `/tmp/poca-<name>.log` (stdout and stderr).
+- `"auth": true` hands the row Poca's secret (see Authentication).
 - A row is grey when one of its ports is in use by something Poca did not start; Poca checks again when start is pressed.
 - Start puts the program in its own session (`setsid`). Stop sends TERM to the group, then KILL after 10 seconds. Poca stops
   only what it started — and **closing the window stops everything Poca started**.

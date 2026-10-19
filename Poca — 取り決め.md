@@ -115,6 +115,18 @@ Poca 独自のショートカットは置かない。ただし **box の開け�
 まとめると「Poca が秘密を作り、起動の時に配る」一つの仕組み。tezcatl 側は受け取って確かめるだけ。細部は tezcatl 側の想定図
 （D-loopback と scope の書き換え）と一緒に決める。
 
+10-19 に決めたこと（テスト用パターン、`test/auth-app`・`test/e2e_auth.mjs`）:
+
+- 名前はヘッダ `X-Poca-Secret`・環境変数 `POCA_SECRET`。秘密は起動ごとに `getrandom` の32バイト（16進）、メモリだけ
+- 配るのは box の `"auth": true` の行だけ。ほかの行には、Poca 自身が受け継いだ `POCA_SECRET` も渡さない
+- ヘッダを付けるのは、送り先が「Poca が起動して動いている `"auth"` の行」のポートで、出したのが **人**（url 欄・ブックマーク・
+  Poca のページから開いたタブ・reload）か **同じ行のページ** のときだけ。別のポートのページの fetch・遷移・`window.open`・
+  そのページが返すリダイレクトには付けない。ページが自分で付けたものは消す
+- リダイレクトの先で秘密を保つのは、前の段に付いていて、かつ同じ行の中のときだけ
+- テスト用アプリのポートは 4300（E2E は 4310・4311、CDP 9333）
+- 未決: WebSocket は handler を通らないのでヘッダを付けられない（tezcatl の中継 `:4100`）。Cookie はポートを区別せず
+  ほかの localhost アプリにも届くので使わない
+
 ## tezcatl 側で要ること（tezcatl のリポジトリで扱う）
 
 - 済み（tezcatl `4949ca2`）: localStorage にあったもの（保存スキン・block・パネルの大きさ・matrix の色・bookmarks・
@@ -128,7 +140,7 @@ Poca 独自のショートカットは置かない。ただし **box の開け�
    入れる（トップページの文が初日から本当であるように）
 2. 済み: box の起動・終了（ポートの確認、グレー表示）。10-19 に crux が通しで確認
 3. 済み: tezcatl の起動コマンドを、既定のブラウザでなく Poca 前提に直す
-4. **次**: 認証（tezcatl と揃えて）
+4. **いま**: 認証。テスト用パターン（OK / NG だけのアプリ）を先に → tezcatl と揃える
 
 without_nix（tezcatl・xipe_totec・emacs-vent・embody）の仕上げは最後。先に tezcatl の認証・dired と magit の intent を済ませる。
 Poca は CEF が大きいので最初から Nix なし。

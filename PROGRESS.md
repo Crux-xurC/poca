@@ -17,8 +17,16 @@ Stages 1 and 2 of `Poca — 取り決め.md` are in place (see `README.md` for w
   browser; emacs-vent and Xipe Totec are separate rows of box. tezcatl keeps its saved skins, blocks, pane sizes, matrix
   colours, bookmarks and kill ring in files (`~/.local/state/tezcatl/work/store/`, its D-store) instead of localStorage,
   which Poca would lose on every close. Both are committed in tezcatl (`4949ca2`).
+- Stage 4, first step: the authentication test pattern. Poca makes a secret per run, hands it to `"auth"`
+  rows in `POCA_SECRET` and adds `X-Poca-Secret` to requests from the person or from a page of the same row (README,
+  "Authentication"). CEF gives navigations no initiator (`null`), so the window records who opens each tab and when the
+  person uses the url field; a navigation otherwise comes from the page it leaves; CEF makes a new handler for each
+  redirect hop, and a hop keeps the secret only when the previous one carried it. `test/auth-app/server.py` says OK / NG;
+  `test/e2e_auth.mjs` checks 25 cases (all ok, run twice).
 
-This machine's `~/.config/poca/box.json` has three rows: tezcatl (4001, 4100), emacs (4000), xipe (4200), all through Nix.
+This machine's `~/.config/poca/box.json` has four rows: tezcatl (4001, 4100), emacs (4000), xipe (4200), all through Nix,
+and auth-test (4300, `"auth": true`); `bookmarks.json` has tezcatl and auth-test. The files before auth-test was added
+are kept beside them as `*.bak-2026-10-19-auth`.
 
 ## Verified
 
@@ -33,7 +41,12 @@ Two core dumps from crashes before the fixes remain in `/var/lib/systemd/coredum
 
 ## Next work
 
-1. Stage 4: authentication with tezcatl — Poca makes a secret at start, hands it to the programs it starts through the
-   environment, and adds it as a header to page requests to the allowed ports only. Designed together with tezcatl's side.
-2. The Nix-free versions of tezcatl, xipe_totec, emacs-vent and embody come last; box's rows then call them instead of
+1. Done (crux, 2026-10-19): the checks the E2E cannot reach (the window's own views): in Poca, the url field to
+   `127.0.0.1:4300` (OK, also while another page is shown), the reload button and Ctrl+R on it (OK); in Brave,
+   `http://127.0.0.1:4300/` (NG).
+2. Stage 4 with tezcatl: the relay (and through it emacs-vent and Xipe Totec) checks the secret. Open: WebSocket requests
+   skip `OnBeforeResourceLoad`, so the header cannot be added to the relay's WebSocket; another carrier is needed (not a
+   cookie: cookies ignore the port and would reach every localhost app). Designed together with tezcatl's side.
+3. Poca does not stop what it started when it is killed by a signal (TERM, logout); only closing the window does.
+4. The Nix-free versions of tezcatl, xipe_totec, emacs-vent and embody come last; box's rows then call them instead of
    `nix develop`.

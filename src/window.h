@@ -34,8 +34,10 @@ class Window : public CefWindowDelegate,
   // The live window, or null before it is created and after it is destroyed.
   static Window* Get();
 
-  // Opens |url| in a new tab and shows it.
-  void OpenTab(const std::string& url);
+  // Opens |url| in a new tab and shows it. |from_port| is who opens it, for
+  // the secret: 0 for the person or a Poca page, else the opening page's port
+  // (Client::NoteNewTab).
+  void OpenTab(const std::string& url, int from_port = 0);
 
   void OnTitle(CefRefPtr<CefBrowser> browser, const std::string& title);
   void OnAddress(CefRefPtr<CefBrowser> browser, const std::string& url);

@@ -214,11 +214,12 @@ bool Window::OnKeyEvent(CefRefPtr<CefTextfield> textfield,
   return false;
 }
 
-void Window::OpenTab(const std::string& url) {
+void Window::OpenTab(const std::string& url, int from_port) {
   CEF_REQUIRE_UI_THREAD();
   if (!window_) {
     return;
   }
+  client_->NoteNewTab(url, from_port);
   Tab tab;
   tab.url = url;
   CefBrowserSettings settings;
@@ -349,6 +350,7 @@ void Window::Navigate(const std::string& text) {
   // "127.0.0.1:4001/x" and "localhost:3000" mean http.
   const std::string url =
       text.find("://") == std::string::npos ? "http://" + text : text;
+  client_->NotePersonLoad(browser->GetIdentifier(), url);
   browser->GetMainFrame()->LoadURL(url);
   tabs_[active_].view->RequestFocus();
 }

@@ -12,6 +12,10 @@ namespace poca {
 // machine). Safe to call on any thread.
 bool IsAllowedUrl(const std::string& url);
 
+// The port of an http(s)/ws(s) URL or origin on 127.0.0.1, localhost or
+// [::1] (80 / 443 when it has none), or 0 for anything else.
+int LoopbackPort(const std::string& url);
+
 // The page shown in place of a refused navigation.
 std::string BlockedPageUrl(const std::string& url);
 

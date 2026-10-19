@@ -6,6 +6,7 @@
 #include <netinet/in.h>
 #include <poll.h>
 #include <signal.h>
+#include <sys/random.h>
 #include <sys/resource.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
@@ -14,6 +15,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <fstream>
+#include <algorithm>
 #include <map>
 #include <mutex>
 #include <sstream>
@@ -31,6 +33,7 @@ namespace poca::programs {
 namespace {
 
 constexpr auto kStopGrace = std::chrono::seconds(10);
+constexpr char kSecretEnv[] = "POCA_SECRET";
 
 struct Entry {
   std::string name;
@@ -39,6 +42,7 @@ struct Entry {
   std::string cwd;
   std::map<std::string, std::string> env;
   std::string log;
+  bool auth = false;
 };
 
 // A program Poca started. Its pid is also its process group.
@@ -48,11 +52,40 @@ struct Proc {
   int status = 0;
   bool stopping = false;
   std::string log;
+  bool auth = false;
+  std::vector<int> ports;
 };
 
 std::mutex g_mutex;
 std::map<std::string, Proc> g_procs;
 struct rlimit g_core_limit;
+
+// 32 bytes from getrandom, as hex. Made in the browser process on first use,
+// so the render and GPU processes never hold it.
+const std::string& Secret() {
+  static const std::string secret = [] {
+    unsigned char bytes[32];
+    size_t got = 0;
+    while (got < sizeof(bytes)) {
+      const ssize_t n = getrandom(bytes + got, sizeof(bytes) - got, 0);
+      if (n < 0) {
+        if (errno == EINTR) {
+          continue;
+        }
+        abort();
+      }
+      got += n;
+    }
+    static const char kHex[] = "0123456789abcdef";
+    std::string hex;
+    for (unsigned char b : bytes) {
+      hex += kHex[b >> 4];
+      hex += kHex[b & 15];
+    }
+    return hex;
+  }();
+  return secret;
+}
 
 std::string ExpandHome(const std::string& path) {
   if (path == "~" || path.rfind("~/", 0) == 0) {
@@ -111,6 +144,7 @@ std::vector<Entry> LoadIndex(std::string* error) {
     }
     e.log = d->HasKey("log") ? ExpandHome(d->GetString("log"))
                              : "/tmp/poca-" + e.name + ".log";
+    e.auth = d->GetBool("auth");
     entries.push_back(e);
   }
   return entries;
@@ -267,12 +301,18 @@ std::string Start(const std::string& name) {
   std::vector<std::string> env_strings;
   for (char** e = environ; *e; ++e) {
     const std::string kv = *e;
-    if (!entry->env.count(kv.substr(0, kv.find('=')))) {
+    const std::string key = kv.substr(0, kv.find('='));
+    if (!entry->env.count(key) && key != kSecretEnv) {
       env_strings.push_back(kv);
     }
   }
   for (const auto& [key, value] : entry->env) {
-    env_strings.push_back(key + "=" + value);
+    if (key != kSecretEnv) {
+      env_strings.push_back(key + "=" + value);
+    }
+  }
+  if (entry->auth) {
+    env_strings.push_back(std::string(kSecretEnv) + "=" + Secret());
   }
   std::vector<char*> envp;
   for (std::string& kv : env_strings) {
@@ -320,6 +360,8 @@ std::string Start(const std::string& name) {
   Proc proc;
   proc.pid = pid;
   proc.log = entry->log;
+  proc.auth = entry->auth;
+  proc.ports = entry->ports;
   g_procs[name] = proc;
   return "";
 }
@@ -333,6 +375,24 @@ std::string Stop(const std::string& name) {
   kill(-it->second.pid, SIGTERM);
   it->second.stopping = true;
   KillLater(it->second.pid);
+  return "";
+}
+
+std::string SecretFor(int port, int from_port) {
+  if (port <= 0 || from_port < 0) {
+    return "";
+  }
+  std::lock_guard<std::mutex> lock(g_mutex);
+  for (auto& [name, proc] : g_procs) {
+    const auto has = [&proc](int p) {
+      return std::find(proc.ports.begin(), proc.ports.end(), p) !=
+             proc.ports.end();
+    };
+    if (proc.auth && has(port) && (from_port == 0 || has(from_port)) &&
+        GroupAlive(proc)) {
+      return Secret();
+    }
+  }
   return "";
 }
 

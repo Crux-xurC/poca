@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdlib>
 
 #include "include/cef_parser.h"
 
@@ -11,6 +12,10 @@ namespace {
 
 bool StartsWith(const std::string& s, const char* prefix) {
   return s.rfind(prefix, 0) == 0;
+}
+
+bool IsLoopbackHost(const std::string& host) {
+  return host == "127.0.0.1" || host == "localhost" || host == "[::1]";
 }
 
 }  // namespace
@@ -35,9 +40,27 @@ bool IsAllowedUrl(const std::string& url) {
   }
   if (scheme == "http" || scheme == "https" || scheme == "ws" ||
       scheme == "wss") {
-    return host == "127.0.0.1" || host == "localhost" || host == "[::1]";
+    return IsLoopbackHost(host);
   }
   return false;
+}
+
+int LoopbackPort(const std::string& url) {
+  CefURLParts parts;
+  if (!CefParseURL(url, parts)) {
+    return 0;
+  }
+  const std::string scheme = CefString(&parts.scheme).ToString();
+  const bool plain = scheme == "http" || scheme == "ws";
+  if ((!plain && scheme != "https" && scheme != "wss") ||
+      !IsLoopbackHost(CefString(&parts.host).ToString())) {
+    return 0;
+  }
+  const std::string port = CefString(&parts.port).ToString();
+  if (port.empty()) {
+    return plain ? 80 : 443;
+  }
+  return std::atoi(port.c_str());
 }
 
 std::string BlockedPageUrl(const std::string& url) {
