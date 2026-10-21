@@ -28,7 +28,7 @@ Poca adds the header only to a request for a port of an `"auth"` row that Poca s
 when the request comes from:
 
 - the person: the url field, a bookmark, a tab opened from a Poca page, reload;
-- a page of the same row (its links, fetches, redirects within the row).
+- a page of the same row (its links, fetches, redirects within the row, and the tabs and windows it opens).
 
 A page of another port (its fetches, navigations, `window.open`, a redirect it answers with) never gets it, and a header
 a page sets itself is dropped. Rows without `"auth"` never see the secret, not even one Poca itself inherited.
@@ -42,12 +42,25 @@ is the program's part.
 `test/auth-app/server.py` is a small app that does both: OK / NG for the page, and `/ticket` with `/ws` (shown on its
 page as WS OK / WS NG). `test/e2e_auth.mjs` drives Poca over CDP against it (`node test/e2e_auth.mjs`; it uses its own
 config and ports 4310, 4311, 9333, never `~/.config/poca`).
+`test/e2e_window.mjs` checks the windows the same way (ports 4320, 4321, 9334; it counts the windows with `wmctrl` and
+sends `Ctrl+N` through XTest).
 
 ## The window
 
 Tabs on top (× closes one), then the url field, bookmark, reload and box buttons, then the page. Keys: `Ctrl+Tab` /
-`Ctrl+Shift+Tab` move between tabs, `Ctrl+R` reloads, `Ctrl+Shift+B` opens and closes box. Copy, paste and editing keys are
-CEF's defaults; every other key goes to the page.
+`Ctrl+Shift+Tab` move between tabs, `Ctrl+R` reloads, `Ctrl+Shift+B` opens and closes box, `Ctrl+N` opens a new window
+(with `poca://home`). Copy, paste and editing keys are CEF's defaults; every other key goes to the page.
+
+One Poca can have several windows. A page's `window.open` with features (`width=…`, `popup`) and a shift-click open a new
+window; `window.open` without features, `target=_blank` and a middle click open a tab in the page's own window. CEF makes
+the popup and Poca places it, so `window.open` returns the new window as in a browser, and Chromium's pop-up blocker still
+applies: without a key press or click shortly before, `window.open` gets `null` and nothing opens. The size
+the features ask for is not followed (every window starts 1200×800). A window or tab a page opens keeps who opened it, so
+a page of an `"auth"` row keeps the secret in the windows it opens (see Authentication); the windows share the in-memory
+request context, so they also share what pages keep while Poca runs. A second Poca started on its own is a separate
+run with its own secret and has started none of the first one's programs: their pages get nothing from it.
+
+Closing a window closes its tabs; Poca ends with its last window.
 
 Poca's own pages: `poca://home` (the logo and the pledge), `poca://box`, `poca://blocked` (shown when something outside was
 refused).
@@ -90,7 +103,7 @@ Keep secrets out of URLs; bookmarks are not encrypted.
 - `"auth": true` hands the row Poca's secret (see Authentication).
 - A row is grey when one of its ports is in use by something Poca did not start; Poca checks again when start is pressed.
 - Start puts the program in its own session (`setsid`). Stop sends TERM to the group, then KILL after 10 seconds. Poca stops
-  only what it started — and **closing the window stops everything Poca started**.
+  only what it started — and **closing Poca's last window stops everything Poca started**.
 - A program that ended by itself shows its exit status and its log.
 - Only `poca://box` can start or stop (a POST from that origin); a localhost page cannot read `poca://`.
 

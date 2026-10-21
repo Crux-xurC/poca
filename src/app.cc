@@ -5,6 +5,7 @@
 #include "include/views/cef_window.h"
 #include "include/wrapper/cef_helpers.h"
 
+#include "client.h"
 #include "scheme.h"
 #include "window.h"
 
@@ -55,7 +56,7 @@ void App::OnContextInitialized() {
   if (url.empty()) {
     url = "poca://home/";
   }
-  CefWindow::CreateTopLevelWindow(new Window(url, context));
+  CefWindow::CreateTopLevelWindow(new Window(url, context, new Client));
 }
 
 }  // namespace poca

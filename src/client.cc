@@ -93,6 +93,32 @@ class RequestGuard : public CefResourceRequestHandler {
 
 }  // namespace
 
+void Client::Open(CefRefPtr<CefBrowser> browser,
+                  const std::string& url,
+                  cef_window_open_disposition_t disposition,
+                  int from_port) {
+  CEF_REQUIRE_UI_THREAD();
+  Window* window = Window::Owning(browser);
+  if (!window) {
+    return;
+  }
+  // window.open with features (width=..., popup) is NEW_POPUP, a
+  // shift-click NEW_WINDOW; everything else (window.open without features,
+  // target=_blank, a middle click) a tab.
+  if (disposition == CEF_WOD_NEW_POPUP || disposition == CEF_WOD_NEW_WINDOW) {
+    window->OpenWindow(url, from_port);
+  } else {
+    window->OpenTab(url, from_port);
+  }
+}
+
+bool Client::TakePopupWantsWindow() {
+  CEF_REQUIRE_UI_THREAD();
+  const bool wants = popup_wants_window_;
+  popup_wants_window_ = false;
+  return wants;
+}
+
 void Client::MarkTabClosing(int browser_id) {
   CEF_REQUIRE_UI_THREAD();
   closing_tabs_.insert(browser_id);
@@ -164,7 +190,7 @@ int Client::NavigationFrom(CefRefPtr<CefBrowser> browser,
 
 void Client::OnTitleChange(CefRefPtr<CefBrowser> browser,
                            const CefString& title) {
-  if (Window* window = Window::Get()) {
+  if (Window* window = Window::Owning(browser)) {
     window->OnTitle(browser, title);
   }
 }
@@ -175,7 +201,7 @@ void Client::OnAddressChange(CefRefPtr<CefBrowser> browser,
   if (!frame->IsMain()) {
     return;
   }
-  if (Window* window = Window::Get()) {
+  if (Window* window = Window::Owning(browser)) {
     window->OnAddress(browser, url);
   }
 }
@@ -199,11 +225,17 @@ bool Client::OnBeforePopup(CefRefPtr<CefBrowser> browser,
                            CefBrowserSettings& settings,
                            CefRefPtr<CefDictionaryValue>& extra_info,
                            bool* no_javascript_access) {
-  // Every popup becomes a tab; the guard still decides what it may load.
-  if (Window* window = Window::Get()) {
-    window->OpenTab(target_url, PagePort(frame->GetURL().ToString()));
+  // CEF makes the popup (so window.open returns it, as in a browser); the
+  // opener's window puts its view in a tab, or in a new window when it asks
+  // for one (Window::OnPopupBrowserViewCreated). The guard still decides
+  // what it may load, and its first load comes from the opener.
+  if (!Window::Owning(browser)) {
+    return true;
   }
-  return true;
+  NoteNewTab(target_url, PagePort(frame->GetURL().ToString()));
+  popup_wants_window_ = target_disposition == CEF_WOD_NEW_POPUP ||
+                        target_disposition == CEF_WOD_NEW_WINDOW;
+  return false;
 }
 
 void Client::OnAfterCreated(CefRefPtr<CefBrowser> browser) {
@@ -253,9 +285,8 @@ bool Client::OnOpenURLFromTab(CefRefPtr<CefBrowser> browser,
   if (target_disposition == CEF_WOD_CURRENT_TAB) {
     return false;
   }
-  if (Window* window = Window::Get()) {
-    window->OpenTab(target_url, PagePort(frame->GetURL().ToString()));
-  }
+  Open(browser, target_url, target_disposition,
+       PagePort(frame->GetURL().ToString()));
   return true;
 }
 

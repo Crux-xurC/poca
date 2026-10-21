@@ -1,5 +1,6 @@
 #include "window.h"
 
+#include <algorithm>
 #include <fstream>
 #include <iterator>
 
@@ -15,12 +16,14 @@ namespace poca {
 
 namespace {
 
-Window* g_window = nullptr;
+// The live windows, oldest first. UI thread.
+std::vector<Window*> g_windows;
 
 // Windows virtual key codes.
 constexpr int kVkeyTab = 0x09;
 constexpr int kVkeyReturn = 0x0D;
 constexpr int kVkeyB = 0x42;
+constexpr int kVkeyN = 0x4E;
 constexpr int kVkeyR = 0x52;
 
 enum Command {
@@ -28,6 +31,7 @@ enum Command {
   kPreviousTab,
   kReload,
   kBox,
+  kNewWindow,
 };
 
 // View ids of the fixed buttons; tab buttons are numbered from kFirstTabId.
@@ -38,6 +42,7 @@ enum ButtonId {
 };
 
 constexpr char kBoxUrl[] = "poca://box/";
+constexpr char kHomeUrl[] = "poca://home/";
 constexpr char kNormalFont[] = "Sans, 13px";
 constexpr char kActiveFont[] = "Sans, Bold 13px";
 
@@ -64,19 +69,34 @@ CefRefPtr<CefImage> LoadIcon() {
 }  // namespace
 
 Window::Window(const std::string& first_url,
-               CefRefPtr<CefRequestContext> context)
+               CefRefPtr<CefRequestContext> context,
+               CefRefPtr<Client> client,
+               int first_from_port)
     : first_url_(first_url),
+      first_from_port_(first_from_port),
       context_(context),
-      client_(new Client),
+      client_(client),
       next_button_id_(kFirstTabId) {}
 
-Window* Window::Get() {
-  return g_window;
+Window::Window(CefRefPtr<Window> opener)
+    : first_from_port_(-1),
+      context_(opener->context_),
+      client_(opener->client_),
+      next_button_id_(kFirstTabId) {}
+
+Window* Window::Owning(CefRefPtr<CefBrowser> browser) {
+  CEF_REQUIRE_UI_THREAD();
+  for (Window* window : g_windows) {
+    if (window->FindTab(browser) >= 0) {
+      return window;
+    }
+  }
+  return g_windows.empty() ? nullptr : g_windows.front();
 }
 
 void Window::OnWindowCreated(CefRefPtr<CefWindow> window) {
   CEF_REQUIRE_UI_THREAD();
-  g_window = this;
+  g_windows.push_back(this);
   window_ = window;
   window_->SetTitle("Poca");
   if (CefRefPtr<CefImage> icon = LoadIcon()) {
@@ -115,14 +135,21 @@ void Window::OnWindowCreated(CefRefPtr<CefWindow> window) {
   window_->SetAccelerator(kPreviousTab, kVkeyTab, true, true, false, true);
   window_->SetAccelerator(kReload, kVkeyR, false, true, false, true);
   window_->SetAccelerator(kBox, kVkeyB, true, true, false, true);
+  window_->SetAccelerator(kNewWindow, kVkeyN, false, true, false, true);
 
-  OpenTab(first_url_);
+  if (first_view_) {
+    AddTab(first_view_, "");
+    first_view_ = nullptr;
+  } else {
+    OpenTab(first_url_, first_from_port_);
+  }
   window_->Show();
 }
 
 void Window::OnWindowDestroyed(CefRefPtr<CefWindow> window) {
   CEF_REQUIRE_UI_THREAD();
-  g_window = nullptr;
+  g_windows.erase(std::remove(g_windows.begin(), g_windows.end(), this),
+                  g_windows.end());
   tabs_.clear();
   url_ = nullptr;
   content_ = nullptr;
@@ -158,6 +185,9 @@ bool Window::OnAccelerator(CefRefPtr<CefWindow> window, int command_id) {
       return true;
     case kBox:
       ShowBox();
+      return true;
+    case kNewWindow:
+      OpenWindow(kHomeUrl);
       return true;
   }
   return false;
@@ -220,16 +250,55 @@ void Window::OpenTab(const std::string& url, int from_port) {
     return;
   }
   client_->NoteNewTab(url, from_port);
+  CefBrowserSettings settings;
+  AddTab(CefBrowserView::CreateBrowserView(client_, url, settings, nullptr,
+                                           context_, this),
+         url);
+}
+
+CefRefPtr<CefBrowserViewDelegate> Window::GetDelegateForPopupBrowserView(
+    CefRefPtr<CefBrowserView> browser_view,
+    const CefBrowserSettings& settings,
+    CefRefPtr<CefClient> client,
+    bool is_devtools) {
+  CEF_REQUIRE_UI_THREAD();
+  if (client_->TakePopupWantsWindow()) {
+    return new Window(this);
+  }
+  return this;
+}
+
+bool Window::OnPopupBrowserViewCreated(
+    CefRefPtr<CefBrowserView> browser_view,
+    CefRefPtr<CefBrowserView> popup_browser_view,
+    bool is_devtools) {
+  CEF_REQUIRE_UI_THREAD();
+  // The delegate GetDelegateForPopupBrowserView returned (no RTTI: through
+  // the CefBrowserViewDelegate base it was stored as).
+  Window* host = static_cast<Window*>(static_cast<CefBrowserViewDelegate*>(
+      popup_browser_view->GetDelegate().get()));
+  if (host == this) {
+    AddTab(popup_browser_view, "");
+  } else {
+    // The new window takes the view as its first tab once it is created.
+    host->first_view_ = popup_browser_view;
+    CefWindow::CreateTopLevelWindow(host);
+  }
+  return true;
+}
+
+void Window::AddTab(CefRefPtr<CefBrowserView> view, const std::string& url) {
+  if (!window_) {
+    return;
+  }
   Tab tab;
   tab.url = url;
-  CefBrowserSettings settings;
-  tab.view = CefBrowserView::CreateBrowserView(client_, url, settings, nullptr,
-                                               context_, this);
+  tab.view = view;
   content_->AddChildView(tab.view);
 
   tab.strip_item = CefPanel::CreatePanel(nullptr);
   Row(tab.strip_item, 0);
-  tab.title = CefLabelButton::CreateLabelButton(this, url);
+  tab.title = CefLabelButton::CreateLabelButton(this, url.empty() ? "…" : url);
   tab.title->SetID(next_button_id_++);
   tab.title->SetMaximumSize(CefSize(220, 0));
   tab.title->SetFontList(kNormalFont);
@@ -241,6 +310,12 @@ void Window::OpenTab(const std::string& url, int from_port) {
 
   tabs_.push_back(tab);
   Activate(static_cast<int>(tabs_.size()) - 1);
+}
+
+void Window::OpenWindow(const std::string& url, int from_port) {
+  CEF_REQUIRE_UI_THREAD();
+  CefWindow::CreateTopLevelWindow(
+      new Window(url, context_, client_, from_port));
 }
 
 void Window::OnTitle(CefRefPtr<CefBrowser> browser, const std::string& title) {

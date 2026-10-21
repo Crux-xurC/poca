@@ -1,4 +1,6 @@
-// Poca's one window, laid out with CEF Views:
+// A Poca window, laid out with CEF Views (one Poca may have several; they
+// share one Client and one request context, so a window opened from a page
+// keeps that page's place for the secret like a tab does):
 //
 //   | tab × | tab × | ...            |
 //   | url              | reload | box |
@@ -28,16 +30,25 @@ class Window : public CefWindowDelegate,
                public CefButtonDelegate,
                public CefTextfieldDelegate {
  public:
+  // |first_from_port| is who opens the first tab (see OpenTab).
   Window(const std::string& first_url,
-         CefRefPtr<CefRequestContext> context);
+         CefRefPtr<CefRequestContext> context,
+         CefRefPtr<Client> client,
+         int first_from_port = 0);
 
-  // The live window, or null before it is created and after it is destroyed.
-  static Window* Get();
+  // A window whose first tab is |popup|, a view CEF made for window.open.
+  explicit Window(CefRefPtr<Window> opener);
+
+  // The live window holding |browser|, else the first live window, else null.
+  static Window* Owning(CefRefPtr<CefBrowser> browser);
 
   // Opens |url| in a new tab and shows it. |from_port| is who opens it, for
   // the secret: 0 for the person or a Poca page, else the opening page's port
   // (Client::NoteNewTab).
   void OpenTab(const std::string& url, int from_port = 0);
+
+  // Opens |url| in a new window of this Poca; |from_port| as for OpenTab.
+  void OpenWindow(const std::string& url, int from_port = 0);
 
   void OnTitle(CefRefPtr<CefBrowser> browser, const std::string& title);
   void OnAddress(CefRefPtr<CefBrowser> browser, const std::string& url);
@@ -60,6 +71,14 @@ class Window : public CefWindowDelegate,
   cef_runtime_style_t GetBrowserRuntimeStyle() override {
     return CEF_RUNTIME_STYLE_ALLOY;
   }
+  CefRefPtr<CefBrowserViewDelegate> GetDelegateForPopupBrowserView(
+      CefRefPtr<CefBrowserView> browser_view,
+      const CefBrowserSettings& settings,
+      CefRefPtr<CefClient> client,
+      bool is_devtools) override;
+  bool OnPopupBrowserViewCreated(CefRefPtr<CefBrowserView> browser_view,
+                                 CefRefPtr<CefBrowserView> popup_browser_view,
+                                 bool is_devtools) override;
 
   // CefButtonDelegate
   void OnButtonPressed(CefRefPtr<CefButton> button) override;
@@ -77,6 +96,8 @@ class Window : public CefWindowDelegate,
     std::string url;
   };
 
+  // Adds |view| (made by OpenTab, or by CEF for a popup) as a tab and shows it.
+  void AddTab(CefRefPtr<CefBrowserView> view, const std::string& url);
   int FindTab(CefRefPtr<CefBrowser> browser) const;
   int FindTabByButton(int button_id) const;
   CefRefPtr<CefBrowser> ActiveBrowser() const;
@@ -87,6 +108,8 @@ class Window : public CefWindowDelegate,
   void Navigate(const std::string& text);
 
   const std::string first_url_;
+  const int first_from_port_;
+  CefRefPtr<CefBrowserView> first_view_;  // a popup's, instead of first_url_
   CefRefPtr<CefRequestContext> context_;
   CefRefPtr<Client> client_;
   CefRefPtr<CefWindow> window_;

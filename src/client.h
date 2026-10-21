@@ -1,5 +1,5 @@
-// The CefClient shared by every tab: reports titles and addresses to the
-// window, turns popups into tabs, refuses what the guard refuses, and adds
+// The CefClient shared by every tab of every window: reports titles and
+// addresses to the window, turns popups into tabs or windows, refuses what the guard refuses, and adds
 // Poca's secret to the requests of box's "auth" rows.
 
 #ifndef POCA_CLIENT_H_
@@ -22,6 +22,18 @@ class Client : public CefClient,
                public CefRequestHandler {
  public:
   Client() = default;
+
+  // Opens |url| from |browser|'s window: in a new window for NEW_POPUP and
+  // NEW_WINDOW, else in a new tab. |from_port| as for Window::OpenTab.
+  void Open(CefRefPtr<CefBrowser> browser,
+            const std::string& url,
+            cef_window_open_disposition_t disposition,
+            int from_port);
+
+  // A popup CEF is creating (window.open, target=_blank) goes to a window of
+  // its own: set by OnBeforePopup, taken once by the opener's
+  // Window::GetDelegateForPopupBrowserView, which comes next. UI thread.
+  bool TakePopupWantsWindow();
 
   // The next close of this browser is a tab close, not a window close.
   void MarkTabClosing(int browser_id);
@@ -100,8 +112,9 @@ class Client : public CefClient,
                      CefRefPtr<CefFrame> frame,
                      CefRefPtr<CefRequest> request);
 
-  // UI thread only.
+  // UI thread only. Poca ends when the last browser of the last window closes.
   int browser_count_ = 0;
+  bool popup_wants_window_ = false;
   std::set<int> closing_tabs_;
 
   // Written on the UI thread, taken (once) on the IO thread.

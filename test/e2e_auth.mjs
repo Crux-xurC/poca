@@ -210,7 +210,7 @@ try {
   check(await resultText(control) === 'NG', 'control navigating to auth-test: NG');
   await control.send('Page.navigate', { url: `http://127.0.0.1:${CONTROL}/` });
   await until('box shows control again', async () => (await control.eval('location.href')).includes(`:${CONTROL}/`));
-  await control.eval(`window.open('http://127.0.0.1:${AUTH}/?popup')`, true);
+  await control.eval(`!!window.open('http://127.0.0.1:${AUTH}/?popup')`, true);
   const popup = await Page.open(await pageAt(`http://127.0.0.1:${AUTH}/?popup`));
   check(await resultText(popup) === 'NG', 'a tab control opens with window.open to auth-test: NG');
   popup.close();

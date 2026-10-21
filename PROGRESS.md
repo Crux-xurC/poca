@@ -1,6 +1,6 @@
 # Poca progress and next steps
 
-Updated: 2026-10-19
+Updated: 2026-10-22
 
 ## Current state
 
@@ -28,6 +28,13 @@ Stages 1 and 2 of `Poca — 取り決め.md` are in place (see `README.md` for w
   unchanged. The E2E now checks 39 cases (used, expired, made-up and missing tickets; control and anything outside
   Poca cannot get one; no ticket in the logs), all ok, run twice.
 
+- Windows (2026-10-22, for tezcatl's tabs and windows): one Poca has several windows sharing one Client and one request
+  context. `window.open` with features and a shift-click open a window, everything else a tab; a window keeps who opened
+  it for the secret, as a tab does; `Ctrl+N` opens one with `poca://home`; Poca ends with its last window.
+  CEF makes the popup and Poca places its view (so `window.open` returns the window, and Chromium's pop-up blocker refuses
+  one with no user gesture). `test/e2e_window.mjs` checks 22 cases (all ok, run twice), and `test/e2e_auth.mjs` is still
+  all ok. tezcatl's `test/e2e/poca_gate.mjs` checks a window its frame opens (`open input window`) reaching the relay.
+
 This machine's `~/.config/poca/box.json` has four rows: tezcatl (4001, 4100), emacs (4000), xipe (4200), all through Nix,
 and auth-test (4300, `"auth": true`); `bookmarks.json` has tezcatl and auth-test. The files before auth-test was added
 are kept beside them as `*.bak-2026-10-19-auth`.
@@ -44,6 +51,9 @@ are kept beside them as `*.bak-2026-10-19-auth`.
 Two core dumps from crashes before the fixes remain in `/var/lib/systemd/coredump` (removing them needs root).
 
 ## Next work
+
+0. crux to check in the real Poca: `Ctrl+N`, closing one window of several, and a window tezcatl opens (`M-w` in the
+   launcher) working against the relay.
 
 1. Done (crux, 2026-10-19): the checks the E2E cannot reach (the window's own views): in Poca, the url field to
    `127.0.0.1:4300` (OK, also while another page is shown), the reload button and Ctrl+R on it (OK); in Brave,
