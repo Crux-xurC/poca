@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <fstream>
 #include <iterator>
+#include <utility>
 
 #include "include/base/cef_callback.h"
 #include "include/views/cef_box_layout.h"
@@ -22,9 +23,16 @@ std::vector<Window*> g_windows;
 // Windows virtual key codes.
 constexpr int kVkeyTab = 0x09;
 constexpr int kVkeyReturn = 0x0D;
+constexpr int kVkeyEscape = 0x1B;
+constexpr int kVkeyPrior = 0x21;
+constexpr int kVkeyNext = 0x22;
+constexpr int kVkeyLeft = 0x25;
+constexpr int kVkeyRight = 0x27;
 constexpr int kVkeyB = 0x42;
 constexpr int kVkeyN = 0x4E;
 constexpr int kVkeyR = 0x52;
+constexpr int kVkeyS = 0x53;
+constexpr int kVkeyX = 0x58;
 
 enum Command {
   kNextTab = 1,
@@ -32,6 +40,15 @@ enum Command {
   kReload,
   kBox,
   kNewWindow,
+  kSynthesis,
+  kExchange,
+  kMoveTabLeft,
+  kMoveTabRight,
+  // only while picking a tab in the strip
+  kPickPrevious,
+  kPickNext,
+  kPickApply,
+  kPickCancel,
 };
 
 // View ids of the fixed buttons; tab buttons are numbered from kFirstTabId.
@@ -45,6 +62,11 @@ constexpr char kBoxUrl[] = "poca://box/";
 constexpr char kHomeUrl[] = "poca://home/";
 constexpr char kNormalFont[] = "Sans, 13px";
 constexpr char kActiveFont[] = "Sans, Bold 13px";
+// The marks before a tab's title: the two sides of the split, and the tab
+// being picked.
+constexpr char kLeftMark[] = "◧ ";
+constexpr char kRightMark[] = "◨ ";
+constexpr char kPickMark[] = "▸ ";
 
 CefRefPtr<CefBoxLayout> Row(CefRefPtr<CefPanel> panel, int spacing) {
   CefBoxLayoutSettings settings;
@@ -117,6 +139,10 @@ void Window::OnWindowCreated(CefRefPtr<CefWindow> window) {
   url_ = CefTextfield::CreateTextfield(this);
   toolbar->AddChildView(url_);
   toolbar_layout->SetFlexForView(url_, 1);
+  hint_ = CefLabelButton::CreateLabelButton(this, "");
+  hint_->SetEnabled(false);
+  hint_->SetVisible(false);
+  toolbar->AddChildView(hint_);
   CefRefPtr<CefLabelButton> reload = CefLabelButton::CreateLabelButton(this, "reload");
   reload->SetID(kReloadButton);
   toolbar->AddChildView(reload);
@@ -125,8 +151,14 @@ void Window::OnWindowCreated(CefRefPtr<CefWindow> window) {
   toolbar->AddChildView(box);
   window_->AddChildView(toolbar);
 
+  // Side by side: a hidden view takes no room, so one visible tab fills it
+  // and two (a split) share it 1:1 (each tab's view has flex 1, AddTab).
   content_ = CefPanel::CreatePanel(nullptr);
-  content_->SetToFillLayout();
+  CefBoxLayoutSettings side_by_side;
+  side_by_side.horizontal = true;
+  side_by_side.cross_axis_alignment = CEF_AXIS_ALIGNMENT_STRETCH;
+  side_by_side.default_flex = 1;
+  content_->SetToBoxLayout(side_by_side);
   window_->AddChildView(content_);
   layout->SetFlexForView(content_, 1);
 
@@ -136,6 +168,10 @@ void Window::OnWindowCreated(CefRefPtr<CefWindow> window) {
   window_->SetAccelerator(kReload, kVkeyR, false, true, false, true);
   window_->SetAccelerator(kBox, kVkeyB, true, true, false, true);
   window_->SetAccelerator(kNewWindow, kVkeyN, false, true, false, true);
+  window_->SetAccelerator(kSynthesis, kVkeyS, true, true, false, true);
+  window_->SetAccelerator(kExchange, kVkeyX, true, true, false, true);
+  window_->SetAccelerator(kMoveTabLeft, kVkeyPrior, true, true, false, true);
+  window_->SetAccelerator(kMoveTabRight, kVkeyNext, true, true, false, true);
 
   if (first_view_) {
     AddTab(first_view_, "");
@@ -151,6 +187,9 @@ void Window::OnWindowDestroyed(CefRefPtr<CefWindow> window) {
   g_windows.erase(std::remove(g_windows.begin(), g_windows.end(), this),
                   g_windows.end());
   tabs_.clear();
+  split_left_ = nullptr;
+  split_right_ = nullptr;
+  hint_ = nullptr;
   url_ = nullptr;
   content_ = nullptr;
   strip_ = nullptr;
@@ -172,6 +211,48 @@ bool Window::CanClose(CefRefPtr<CefWindow> window) {
 bool Window::OnAccelerator(CefRefPtr<CefWindow> window, int command_id) {
   const int count = static_cast<int>(tabs_.size());
   switch (command_id) {
+    case kPickPrevious:
+      MovePick(-1);
+      return true;
+    case kPickNext:
+      MovePick(1);
+      return true;
+    case kPickApply:
+      EndPick(true);
+      return true;
+    case kPickCancel:
+      EndPick(false);
+      return true;
+  }
+  // any other key ends picking first (the same key again: just that)
+  if (pick_mode_ != kNoPick) {
+    const bool same = (command_id == kSynthesis && pick_mode_ == kPickSynthesis) ||
+                      (command_id == kExchange && pick_mode_ == kPickExchange);
+    EndPick(false);
+    if (same) {
+      return true;
+    }
+  }
+  switch (command_id) {
+    case kSynthesis:
+      // in a split it is undone: the two are tabs of their own again
+      if (InSplit(active_)) {
+        split_left_ = nullptr;
+        split_right_ = nullptr;
+        Activate(active_);
+      } else {
+        StartPick(kPickSynthesis);
+      }
+      return true;
+    case kExchange:
+      StartPick(kPickExchange);
+      return true;
+    case kMoveTabLeft:
+      MoveTab(active_, active_ - 1);
+      return true;
+    case kMoveTabRight:
+      MoveTab(active_, active_ + 1);
+      return true;
     case kNextTab:
       Activate((active_ + 1) % count);
       return true;
@@ -224,6 +305,17 @@ void Window::OnButtonPressed(CefRefPtr<CefButton> button) {
   const int index = FindTabByButton(id);
   if (index < 0) {
     return;
+  }
+  // picking: a click on a tab's title picks it
+  if (pick_mode_ != kNoPick && tabs_[index].title->GetID() == id) {
+    if (index != active_) {
+      pick_ = index;
+      EndPick(true);
+    }
+    return;
+  }
+  if (pick_mode_ != kNoPick) {
+    EndPick(false);
   }
   if (tabs_[index].close->GetID() == id) {
     // The button is destroyed with its tab, and CEF still touches it after
@@ -291,8 +383,12 @@ void Window::AddTab(CefRefPtr<CefBrowserView> view, const std::string& url) {
   if (!window_) {
     return;
   }
+  if (pick_mode_ != kNoPick) {
+    EndPick(false);
+  }
   Tab tab;
   tab.url = url;
+  tab.label = url.empty() ? "…" : url;
   tab.view = view;
   content_->AddChildView(tab.view);
 
@@ -323,7 +419,8 @@ void Window::OnTitle(CefRefPtr<CefBrowser> browser, const std::string& title) {
   if (index < 0) {
     return;
   }
-  tabs_[index].title->SetText(title.empty() ? tabs_[index].url : title);
+  tabs_[index].label = title.empty() ? tabs_[index].url : title;
+  RefreshTitle(index);
   strip_->Layout();
 }
 
@@ -370,11 +467,7 @@ void Window::Activate(int index) {
     return;
   }
   active_ = index;
-  for (size_t i = 0; i < tabs_.size(); ++i) {
-    const bool active = static_cast<int>(i) == index;
-    tabs_[i].view->SetVisible(active);
-    tabs_[i].title->SetFontList(active ? kActiveFont : kNormalFont);
-  }
+  ShowViews();
   url_->SetText(tabs_[index].url);
   window_->Layout();
   tabs_[index].view->RequestFocus();
@@ -392,7 +485,15 @@ void Window::CloseTab(int index) {
     window_->Close();
     return;
   }
+  if (pick_mode_ != kNoPick) {
+    EndPick(false);
+  }
   Tab tab = tabs_[index];
+  // a side of the split closes: the other is a tab of its own again
+  if (InSplit(index)) {
+    split_left_ = nullptr;
+    split_right_ = nullptr;
+  }
   tabs_.erase(tabs_.begin() + index);
   if (CefRefPtr<CefBrowser> browser = tab.view->GetBrowser()) {
     client_->MarkTabClosing(browser->GetIdentifier());
@@ -428,6 +529,171 @@ void Window::Navigate(const std::string& text) {
   client_->NotePersonLoad(browser->GetIdentifier(), url);
   browser->GetMainFrame()->LoadURL(url);
   tabs_[active_].view->RequestFocus();
+}
+
+int Window::IndexOf(CefRefPtr<CefBrowserView> view) const {
+  if (!view) {
+    return -1;
+  }
+  for (size_t i = 0; i < tabs_.size(); ++i) {
+    if (tabs_[i].view->IsSame(view)) {
+      return static_cast<int>(i);
+    }
+  }
+  return -1;
+}
+
+bool Window::InSplit(int index) const {
+  if (!split_left_ || index < 0 || index >= static_cast<int>(tabs_.size())) {
+    return false;
+  }
+  return tabs_[index].view->IsSame(split_left_) ||
+         tabs_[index].view->IsSame(split_right_);
+}
+
+// The active tab alone, or -- when it is a side of the split -- both sides,
+// the left one first.
+void Window::ShowViews() {
+  const bool split = InSplit(active_);
+  for (size_t i = 0; i < tabs_.size(); ++i) {
+    const int n = static_cast<int>(i);
+    tabs_[i].view->SetVisible(n == active_ || (split && InSplit(n)));
+    tabs_[i].title->SetFontList(n == active_ ? kActiveFont : kNormalFont);
+    RefreshTitle(n);
+  }
+  if (split) {
+    content_->ReorderChildView(split_left_, 0);
+    content_->ReorderChildView(split_right_, 1);
+  }
+}
+
+void Window::RefreshTitle(int index) {
+  Tab& tab = tabs_[index];
+  std::string text;
+  if (pick_mode_ != kNoPick && index == pick_) {
+    text += kPickMark;
+  }
+  if (split_left_ && tab.view->IsSame(split_left_)) {
+    text += kLeftMark;
+  } else if (split_right_ && tab.view->IsSame(split_right_)) {
+    text += kRightMark;
+  }
+  tab.title->SetText(text + tab.label);
+}
+
+// Moves the tab at |from| to |to| in the strip; the active tab and the one
+// being picked stay what they were.
+void Window::MoveTab(int from, int to) {
+  const int count = static_cast<int>(tabs_.size());
+  if (from < 0 || from >= count || to < 0 || to >= count || from == to) {
+    return;
+  }
+  CefRefPtr<CefBrowserView> active = tabs_[active_].view;
+  CefRefPtr<CefBrowserView> picked =
+      pick_ >= 0 && pick_ < count ? tabs_[pick_].view : nullptr;
+  Tab tab = tabs_[from];
+  tabs_.erase(tabs_.begin() + from);
+  tabs_.insert(tabs_.begin() + to, tab);
+  strip_->ReorderChildView(tab.strip_item, to);
+  active_ = IndexOf(active);
+  pick_ = picked ? IndexOf(picked) : -1;
+  strip_->Layout();
+  Activate(active_);
+}
+
+// Picking: synthesis -- any tab but the active one; exchange (the active tab
+// is a side of the split) -- any tab but the active one, the other side too.
+void Window::StartPick(Pick mode) {
+  const int count = static_cast<int>(tabs_.size());
+  if (count < 2 || (mode == kPickExchange && !InSplit(active_))) {
+    return;
+  }
+  pick_mode_ = mode;
+  pick_ = (active_ + 1) % count;
+  window_->SetAccelerator(kPickPrevious, kVkeyLeft, false, false, false, true);
+  window_->SetAccelerator(kPickNext, kVkeyRight, false, false, false, true);
+  window_->SetAccelerator(kPickApply, kVkeyReturn, false, false, false, true);
+  window_->SetAccelerator(kPickCancel, kVkeyEscape, false, false, false, true);
+  hint_->SetText(mode == kPickSynthesis
+                     ? "beside it: ← → Enter (Esc: no)"
+                     : "in its place, or swap: ← → Enter (Esc: no)");
+  hint_->SetVisible(true);
+  ShowViews();
+  window_->Layout();
+}
+
+void Window::MovePick(int step) {
+  const int count = static_cast<int>(tabs_.size());
+  if (pick_mode_ == kNoPick || count < 2) {
+    return;
+  }
+  do {
+    pick_ = (pick_ + step + count) % count;
+  } while (pick_ == active_);
+  ShowViews();
+}
+
+void Window::EndPick(bool apply) {
+  if (pick_mode_ == kNoPick) {
+    return;
+  }
+  const Pick mode = pick_mode_;
+  const int chosen = pick_;
+  pick_mode_ = kNoPick;
+  pick_ = -1;
+  window_->RemoveAccelerator(kPickPrevious);
+  window_->RemoveAccelerator(kPickNext);
+  window_->RemoveAccelerator(kPickApply);
+  window_->RemoveAccelerator(kPickCancel);
+  hint_->SetVisible(false);
+  if (apply && chosen >= 0 && chosen < static_cast<int>(tabs_.size()) &&
+      chosen != active_) {
+    if (mode == kPickSynthesis) {
+      Synthesize(chosen);
+    } else {
+      Exchange(chosen);
+    }
+    return;
+  }
+  Activate(active_);
+}
+
+// The active tab on the left, |chosen| on the right, next to it in the strip
+// (so Ctrl+Tab goes from one side to the other).
+void Window::Synthesize(int chosen) {
+  CefRefPtr<CefBrowserView> left = tabs_[active_].view;
+  CefRefPtr<CefBrowserView> right = tabs_[chosen].view;
+  split_left_ = left;
+  split_right_ = right;
+  const int at = IndexOf(left);
+  MoveTab(IndexOf(right), chosen > at ? at + 1 : at);
+  Activate(IndexOf(left));
+}
+
+// The active tab is a side of the split. |chosen| the other side: the two
+// swap sides. Any other tab: it comes forward in the active one's place, and
+// the active one goes back where |chosen| was in the strip.
+void Window::Exchange(int chosen) {
+  CefRefPtr<CefBrowserView> active = tabs_[active_].view;
+  CefRefPtr<CefBrowserView> other = tabs_[chosen].view;
+  if (InSplit(chosen)) {
+    std::swap(split_left_, split_right_);
+    MoveTab(IndexOf(other), IndexOf(active));
+    Activate(IndexOf(active));
+    return;
+  }
+  if (active->IsSame(split_left_)) {
+    split_left_ = other;
+  } else {
+    split_right_ = other;
+  }
+  // the two change places in the strip: |other| to the active one's, then the
+  // active one to where |other| was
+  const int a = IndexOf(active);
+  const int b = IndexOf(other);
+  MoveTab(b, a);
+  MoveTab(IndexOf(active), b);
+  Activate(IndexOf(other));
 }
 
 }  // namespace poca

@@ -3,8 +3,14 @@
 // keeps that page's place for the secret like a tab does):
 //
 //   | tab × | tab × | ...            |
-//   | url              | reload | box |
-//   | the active tab's BrowserView    |
+//   | url       | hint | reload | box |
+//   | the active tab's BrowserView    |   or, split: | left | right |
+//
+// Two tabs can be shown side by side, 1:1 (a split): Ctrl+Shift+S picks the
+// tab to put beside the active one, Ctrl+Shift+X (in a split) picks a tab to
+// take the active one's place, or the other side to swap them. Picking is
+// done in the tab strip: Left / Right, Enter, Escape (or a click on a tab).
+// Ctrl+Shift+PageUp / PageDown move the active tab in the strip.
 
 #ifndef POCA_WINDOW_H_
 #define POCA_WINDOW_H_
@@ -94,6 +100,7 @@ class Window : public CefWindowDelegate,
     CefRefPtr<CefLabelButton> title;
     CefRefPtr<CefLabelButton> close;
     std::string url;
+    std::string label;  // the page's title (or url), without the marks
   };
 
   // Adds |view| (made by OpenTab, or by CEF for a popup) as a tab and shows it.
@@ -107,6 +114,19 @@ class Window : public CefWindowDelegate,
   void ShowBox();
   void Navigate(const std::string& text);
 
+  // The split (two tabs side by side) and picking a tab in the strip.
+  enum Pick { kNoPick, kPickSynthesis, kPickExchange };
+  int IndexOf(CefRefPtr<CefBrowserView> view) const;
+  bool InSplit(int index) const;
+  void ShowViews();
+  void RefreshTitle(int index);
+  void MoveTab(int from, int to);
+  void StartPick(Pick mode);
+  void MovePick(int step);
+  void EndPick(bool apply);
+  void Synthesize(int chosen);
+  void Exchange(int chosen);
+
   const std::string first_url_;
   const int first_from_port_;
   CefRefPtr<CefBrowserView> first_view_;  // a popup's, instead of first_url_
@@ -116,6 +136,11 @@ class Window : public CefWindowDelegate,
   CefRefPtr<CefPanel> strip_;
   CefRefPtr<CefPanel> content_;
   CefRefPtr<CefTextfield> url_;
+  CefRefPtr<CefLabelButton> hint_;   // what picking asks for; hidden otherwise
+  CefRefPtr<CefBrowserView> split_left_;
+  CefRefPtr<CefBrowserView> split_right_;
+  Pick pick_mode_ = kNoPick;
+  int pick_ = -1;
   std::vector<Tab> tabs_;
   int active_ = -1;
   int next_button_id_;

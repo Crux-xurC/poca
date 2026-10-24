@@ -1,6 +1,6 @@
 # Poca progress and next steps
 
-Updated: 2026-10-22
+Updated: 2026-10-24
 
 ## Current state
 
@@ -34,6 +34,15 @@ Stages 1 and 2 of `Poca — 取り決め.md` are in place (see `README.md` for w
   CEF makes the popup and Poca places its view (so `window.open` returns the window, and Chromium's pop-up blocker refuses
   one with no user gesture). `test/e2e_window.mjs` checks 22 cases (all ok, run twice), and `test/e2e_auth.mjs` is still
   all ok. tezcatl's `test/e2e/poca_gate.mjs` checks a window its frame opens (`open input window`) reaching the relay.
+
+- Split view (2026-10-24, crux's idea for tezcatl's frames side by side): two tabs shown 1:1 (`Ctrl+Shift+S` picks the
+  one beside the active tab; `Ctrl+Shift+X` puts another in the active side's place, or swaps the sides; picking in the strip
+  with ← → Enter / Escape or a click), and moving a tab in the strip (`Ctrl+Shift+PageUp` / `PageDown`). The content panel
+  is a horizontal box layout whose hidden views take no room. `test/e2e_split.mjs` checks 8 cases on Xvfb (all ok), and
+  `test/e2e_auth.mjs` is still all ok with this build (on Xvfb, with `--no-first-run`). Built in `build-dev/` (not tracked,
+  in `.git/info/exclude`) so that the running Poca's `build/Release/poca` stayed as it was. Not committed yet.
+  On tezcatl's side the frames come together through the dock (D-bridge): a frame's dock sends to another frame with
+  `;i f`.
 
 This machine's `~/.config/poca/box.json` has four rows: tezcatl (4001, 4100), emacs (4000), xipe (4200), all through Nix,
 and auth-test (4300, `"auth": true`); `bookmarks.json` has tezcatl and auth-test. The files before auth-test was added

@@ -44,12 +44,28 @@ page as WS OK / WS NG). `test/e2e_auth.mjs` drives Poca over CDP against it (`no
 config and ports 4310, 4311, 9333, never `~/.config/poca`).
 `test/e2e_window.mjs` checks the windows the same way (ports 4320, 4321, 9334; it counts the windows with `wmctrl` and
 sends `Ctrl+N` through XTest).
+`test/e2e_split.mjs` checks the split and the strip's keys (port 4330): xdotool sends the keys and a screenshot says
+which tab's colour is at the left and the right of the page. Run it on a display of its own, without a window manager
+(`Xvfb :99`, `DISPLAY=:99 node test/e2e_split.mjs`; `POCA=` and `XDOTOOL=` say where they are), so that neither the keys
+nor the window reach the desktop. Poca is started with `--no-first-run`: in a fresh profile Chromium's first-run dialog
+(terms of service) would stop it.
 
 ## The window
 
 Tabs on top (× closes one), then the url field, bookmark, reload and box buttons, then the page. Keys: `Ctrl+Tab` /
 `Ctrl+Shift+Tab` move between tabs, `Ctrl+R` reloads, `Ctrl+Shift+B` opens and closes box, `Ctrl+N` opens a new window
-(with `poca://home`). Copy, paste and editing keys are CEF's defaults; every other key goes to the page.
+(with `poca://home`), `Ctrl+Shift+PageUp` / `Ctrl+Shift+PageDown` move the active tab left / right in the strip. Copy,
+paste and editing keys are CEF's defaults; every other key goes to the page.
+
+**Two tabs side by side (a split).** `Ctrl+Shift+S` picks a tab to show beside the active one: the strip marks the tab
+picked with `▸`, `←` / `→` move the mark, `Enter` takes it (a click on a tab too), `Escape` leaves it. The active tab goes on
+the left, the one picked on the right, half the width each; the one picked moves next to it in the strip, so `Ctrl+Tab` goes
+from one side to the other and the split stays. The sides are marked `◧` (left) and `◨` (right); going to any other tab
+shows that one alone, and coming back to either side shows the two again. With a side of the split active:
+`Ctrl+Shift+X` picks a tab to take the active one's place (the active one goes back where the picked one was in the strip),
+or picks the other side to swap the two; `Ctrl+Shift+S` undoes the split. Closing a side undoes it too. While picking, the
+toolbar says what is asked. These keys were chosen to stay clear of the pages' own (`Ctrl+S` saves in tezcatl's
+code_vi, `Ctrl+X` is Emacs' prefix).
 
 One Poca can have several windows. A page's `window.open` with features (`width=…`, `popup`) and a shift-click open a new
 window; `window.open` without features, `target=_blank` and a middle click open a tab in the page's own window. CEF makes
