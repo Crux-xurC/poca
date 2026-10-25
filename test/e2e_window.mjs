@@ -14,7 +14,8 @@
 //   - closing one window leaves Poca and the programs running; closing the
 //     last one stops them and ends Poca
 //
-// Needs a built build/Release/poca, an X display, /usr/bin/python3,
+// Needs a built Poca (POCA, default build/Release/poca), an X display with a
+// window manager (wmctrl lists and raises windows through it), /usr/bin/python3,
 // /usr/bin/wmctrl and libXtst. Run: node test/e2e_window.mjs
 
 import { spawn, execFileSync } from 'node:child_process';
@@ -24,7 +25,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const POCA = path.join(ROOT, 'build/Release/poca');
+const POCA = process.env.POCA || path.join(ROOT, 'build/Release/poca');
 const SERVER = path.join(ROOT, 'test/auth-app/server.py');
 const AUTH = 4320, CONTROL = 4321, CDP = 9334;
 
@@ -138,7 +139,8 @@ async function nogestureFresh() {
 
 // --- run -------------------------------------------------------------------
 
-const poca = spawn(POCA, [`--remote-debugging-port=${CDP}`, '--url=poca://box/'], {
+// --no-first-run: no first-run dialog of Chromium (terms of service) in a fresh profile
+const poca = spawn(POCA, [`--remote-debugging-port=${CDP}`, '--url=poca://box/', '--no-first-run'], {
   env: { ...process.env, XDG_CONFIG_HOME: config, XDG_RUNTIME_DIR: runtime },
   stdio: 'ignore',
 });

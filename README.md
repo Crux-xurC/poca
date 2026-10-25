@@ -43,12 +43,12 @@ is the program's part.
 page as WS OK / WS NG). `test/e2e_auth.mjs` drives Poca over CDP against it (`node test/e2e_auth.mjs`; it uses its own
 config and ports 4310, 4311, 9333, never `~/.config/poca`).
 `test/e2e_window.mjs` checks the windows the same way (ports 4320, 4321, 9334; it counts the windows with `wmctrl` and
-sends `Ctrl+N` through XTest).
+sends `Ctrl+N` through XTest, so the display needs a window manager: on a display of its own, `Xvfb :99` and `openbox`).
 `test/e2e_split.mjs` checks the split and the strip's keys (port 4330): xdotool sends the keys and a screenshot says
 which tab's colour is at the left and the right of the page. Run it on a display of its own, without a window manager
 (`Xvfb :99`, `DISPLAY=:99 node test/e2e_split.mjs`; `POCA=` and `XDOTOOL=` say where they are), so that neither the keys
-nor the window reach the desktop. Poca is started with `--no-first-run`: in a fresh profile Chromium's first-run dialog
-(terms of service) would stop it.
+nor the window reach the desktop. All three start Poca with `--no-first-run` (in a fresh profile Chromium's first-run
+dialog, its terms of service, would stop it) and take `POCA=` for another build (e.g. `build-dev/Release/poca`).
 
 ## The window
 

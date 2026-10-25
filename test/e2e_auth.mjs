@@ -21,7 +21,7 @@
 //
 // Not covered (the window's own views): the url field and Ctrl+R.
 //
-// Needs a built build/Release/poca, a display (the window shows briefly),
+// Needs a built Poca (POCA, default build/Release/poca), a display (the window shows briefly),
 // /usr/bin/python3 and /usr/bin/chromium. Run: node test/e2e_auth.mjs
 
 import { spawn, execFileSync } from 'node:child_process';
@@ -31,7 +31,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const POCA = path.join(ROOT, 'build/Release/poca');
+const POCA = process.env.POCA || path.join(ROOT, 'build/Release/poca');
 const SERVER = path.join(ROOT, 'test/auth-app/server.py');
 const AUTH = 4310, CONTROL = 4311, CDP = 9333, TTL = 2;
 
@@ -123,7 +123,8 @@ const ticketFrom = (page, url) => page.eval(
 // --- run -------------------------------------------------------------------
 
 const FAKE = 'inherited-by-poca-must-not-leak';
-const poca = spawn(POCA, [`--remote-debugging-port=${CDP}`, '--url=poca://box/'], {
+// --no-first-run: no first-run dialog of Chromium (terms of service) in a fresh profile
+const poca = spawn(POCA, [`--remote-debugging-port=${CDP}`, '--url=poca://box/', '--no-first-run'], {
   env: { ...process.env, XDG_CONFIG_HOME: config, XDG_RUNTIME_DIR: runtime, POCA_SECRET: FAKE },
   stdio: 'ignore',
 });
