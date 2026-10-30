@@ -137,6 +137,10 @@ env -i HOME=$HOME PATH=/usr/bin:/bin cmake --build build --target poca -j
 The result is `build/Release/poca` (with `poca_resources/` beside it). Start it with `./run`. `./install-desktop` adds
 Poca to the desktop's application list (`~/.local/share/applications/poca.desktop`, `WM_CLASS` `poca`).
 
+The window icon is `icon/poca-128.png` and `icon/poca-256.png`, made from `poca.png` (which stays the launcher's icon and the
+home page's logo). A 2048 px icon is too large to put on an X11 window, and Chromium's logo is shown instead. After changing
+`poca.png`, make them again: `for s in 128 256; do magick poca.png -resize ${s}x${s} -strip PNG32:icon/poca-$s.png; done`.
+
 The CEF sandbox is off (its SUID helper needs root to install). `CMakeLists.txt` is adapted from the CEF distribution; review
 the SDK's `LICENSE.txt` and redistribution terms before publishing builds.
 

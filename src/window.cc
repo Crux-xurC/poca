@@ -76,16 +76,27 @@ CefRefPtr<CefBoxLayout> Row(CefRefPtr<CefPanel> panel, int spacing) {
   return panel->SetToBoxLayout(settings);
 }
 
+std::vector<char> ReadFile(const std::string& path) {
+  std::ifstream in(path, std::ios::binary);
+  return std::vector<char>((std::istreambuf_iterator<char>(in)),
+                           std::istreambuf_iterator<char>());
+}
+
+// The window icon: icon/poca-128.png at scale 1, poca-256.png at scale 2.
+// Not poca.png itself: on X11 the icon goes to the window as raw pixels
+// (_NET_WM_ICON), and 2048x2048 (16 MB) is past what X takes in one
+// request -- Chromium then keeps its own logo.
 CefRefPtr<CefImage> LoadIcon() {
-  std::ifstream in(ResourcesDir() + "/poca.png", std::ios::binary);
-  std::vector<char> png((std::istreambuf_iterator<char>(in)),
-                        std::istreambuf_iterator<char>());
-  if (png.empty()) {
-    return nullptr;
-  }
   CefRefPtr<CefImage> image = CefImage::CreateImage();
-  image->AddPNG(1.0f, png.data(), png.size());
-  return image;
+  const std::pair<float, const char*> sizes[] = {{1.0f, "poca-128.png"},
+                                                 {2.0f, "poca-256.png"}};
+  for (const auto& [scale, name] : sizes) {
+    std::vector<char> png = ReadFile(ResourcesDir() + "/" + name);
+    if (!png.empty()) {
+      image->AddPNG(scale, png.data(), png.size());
+    }
+  }
+  return image->IsEmpty() ? nullptr : image;
 }
 
 }  // namespace

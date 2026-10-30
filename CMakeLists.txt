@@ -70,4 +70,9 @@ add_custom_command(TARGET ${CEF_TARGET} POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy
           "${CMAKE_CURRENT_SOURCE_DIR}/poca.png"
           "${CEF_TARGET_OUT_DIR}/poca_resources/poca.png"
+  # the window icon (small: see LoadIcon in src/window.cc)
+  COMMAND ${CMAKE_COMMAND} -E copy
+          "${CMAKE_CURRENT_SOURCE_DIR}/icon/poca-128.png"
+          "${CMAKE_CURRENT_SOURCE_DIR}/icon/poca-256.png"
+          "${CEF_TARGET_OUT_DIR}/poca_resources/"
   VERBATIM)
