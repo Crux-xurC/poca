@@ -64,8 +64,8 @@ from one side to the other and the split stays. The sides are marked `◧` (left
 shows that one alone, and coming back to either side shows the two again. With a side of the split active:
 `Ctrl+Shift+X` picks a tab to take the active one's place (the active one goes back where the picked one was in the strip),
 or picks the other side to swap the two; `Ctrl+Shift+S` undoes the split. Closing a side undoes it too. While picking, the
-toolbar says what is asked. These keys were chosen to stay clear of the pages' own (`Ctrl+S` saves in tezcatl's
-code_vi, `Ctrl+X` is Emacs' prefix).
+toolbar says what is asked. These keys were chosen to leave the pages their own `Ctrl+S` (save in many editors) and
+`Ctrl+X` (Emacs' prefix).
 
 One Poca can have several windows. A page's `window.open` with features (`width=…`, `popup`) and a shift-click open a new
 window; `window.open` without features, `target=_blank` and a middle click open a tab in the page's own window. CEF makes
