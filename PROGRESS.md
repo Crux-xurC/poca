@@ -4,7 +4,7 @@ Updated: 2026-10-24
 
 ## Current state
 
-Stages 1 and 2 of `Poca — 取り決め.md` are in place (see `README.md` for what they do):
+Stages 1 and 2 of the plan are in place (see `README.md` for what they do):
 
 - Stage 1: the CEF Views (Alloy style) window with tabs, url field, bookmarks, reload and box; the keys; `poca://home`,
   `poca://box`, `poca://blocked`. The localhost guard (OnBeforeBrowse, OnBeforeResourceLoad, popups as tabs, downloads

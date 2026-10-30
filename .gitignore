@@ -1,2 +1,7 @@
 /build/
 /vendor/
+
+# Local-only notes, kept out of the published repository: the Japanese
+# design documents and the notes for agent sessions
+/CODEX.md
+/Poca — *.md

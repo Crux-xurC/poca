@@ -146,6 +146,9 @@ the SDK's `LICENSE.txt` and redistribution terms before publishing builds.
 
 ## Development notes
 
-- [What has been decided](Poca%20%E2%80%94%20%E5%8F%96%E3%82%8A%E6%B1%BA%E3%82%81.md) (`Poca — 取り決め.md`, Japanese; newer than the first brief)
 - [Progress and next steps](PROGRESS.md)
-- [Notes for agent sessions](CODEX.md)
+
+## License
+
+MIT ([LICENSE](LICENSE)). `CMakeLists.txt` and `src/main.cc` are adapted from the CEF binary distribution; the parts taken
+from it remain under CEF's BSD-style license (see the notes at the top of those files).
