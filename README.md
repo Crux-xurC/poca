@@ -101,15 +101,16 @@ Keep secrets out of URLs; bookmarks are not encrypted.
 {"programs": [
   {"name": "tezcatl",
    "ports": [4001, 4100],
-   "run": ["/nix/var/nix/profiles/default/bin/nix", "develop", "~/my_app/tezcatl",
-           "--command", "~/my_app/tezcatl/nix/t"],
-   "cwd": "~/my_app/tezcatl",
+   "auth": true,
+   "run": ["/nix/var/nix/profiles/default/bin/nix", "develop", "~/src/tezcatl",
+           "--command", "~/src/tezcatl/nix/t"],
+   "cwd": "~/src/tezcatl",
    "env": {},
    "log": "/tmp/poca-tezcatl.log"},
   {"name": "auth-test",
    "ports": [4300],
    "auth": true,
-   "run": ["/usr/bin/python3", "-I", "~/my_app_no_nix/poca/test/auth-app/server.py", "--port", "4300"]}
+   "run": ["/usr/bin/python3", "-I", "~/src/poca/test/auth-app/server.py", "--port", "4300"]}
 ]}
 ```
 
