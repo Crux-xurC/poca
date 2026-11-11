@@ -10,9 +10,24 @@ set(CMAKE_CONFIGURATION_TYPES Debug Release CACHE STRING
 
 project(poca)
 
-set(CEF_ROOT
-    "${CMAKE_CURRENT_SOURCE_DIR}/vendor/cef_binary_152.0.14+g8a0b5b9+chromium-152.0.7977.167_linux64"
-    CACHE PATH "The CEF binary distribution")
+# CEF is shared with other programs (Xochipilli), not kept in this tree: one
+# directory per distribution under ~/.local/share/cef/. A CEF program runs only
+# with the exact version it was built against, so the name says which one.
+# -DCEF_ROOT=... or the environment variable CEF_ROOT points elsewhere.
+set(POCA_CEF_DIST "cef_binary_152.0.14+g8a0b5b9+chromium-152.0.7977.167_linux64")
+if(DEFINED ENV{CEF_ROOT})
+  set(_poca_cef_default "$ENV{CEF_ROOT}")
+else()
+  set(_poca_cef_default "$ENV{HOME}/.local/share/cef/${POCA_CEF_DIST}")
+endif()
+set(CEF_ROOT "${_poca_cef_default}" CACHE PATH "The CEF binary distribution")
+if(NOT EXISTS "${CEF_ROOT}/cmake/FindCEF.cmake")
+  message(FATAL_ERROR
+    "CEF not found at ${CEF_ROOT}\n"
+    "Download ${POCA_CEF_DIST} (https://cef-builds.spotifycdn.com/index.html) and "
+    "expand it under ~/.local/share/cef/, or set CEF_ROOT. A build directory made "
+    "before CEF moved keeps the old path: give -DCEF_ROOT=... once.")
+endif()
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CEF_ROOT}/cmake")
 
 # The SUID chrome-sandbox would need root to install; Poca only loads localhost.

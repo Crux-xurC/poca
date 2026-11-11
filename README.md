@@ -126,9 +126,10 @@ Keep secrets out of URLs; bookmarks are not encrypted.
 
 ## Build
 
-Download the CEF binary distribution `cef_binary_152.0.14+g8a0b5b9+chromium-152.0.7977.167_linux64` into `vendor/` (not
-tracked in Git; it expands to about 3 GB). Build outside any Nix shell, with CMake 3.21+, a C++20 toolchain and the Linux
-development libraries CEF needs (X11, GLib, DBus, …):
+Download the CEF binary distribution `cef_binary_152.0.14+g8a0b5b9+chromium-152.0.7977.167_linux64` and expand it under
+`~/.local/share/cef/` (about 3 GB; shared with other CEF programs, one directory per distribution — or set `CEF_ROOT` to
+where it is). Build outside any Nix shell, with CMake 3.21+, a C++20 toolchain and the Linux development libraries CEF needs
+(X11, GLib, DBus, …):
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
